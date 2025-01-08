@@ -1,3 +1,48 @@
+from flask import Flask, jsonify, render_template_string
+import pandas as pd
+
+app = Flask(__name__)
+
+# Ścieżka do pliku Excel
+FILE_PATH = "plik.xlsx"  # Zamień na rzeczywistą ścieżkę do pliku
+SHEET_NAME = "aaa"
+
+# Endpoint do pobierania danych
+@app.route('/data', methods=['GET'])
+def get_data():
+    # Wczytaj dane z Excela
+    df = pd.read_excel(FILE_PATH, sheet_name=SHEET_NAME)
+
+    # Konwertuj dane na format Highcharts
+    nodes = []
+    links = []
+    node_positions = {}  # Ręczne przypisanie pozycji węzłów
+
+    level_map = {"entity": 0, "property": 1, "company": 2}
+
+    for _, row in df.iterrows():
+        entity = row["reporting_entity_name"]
+        property_ = row["property_name"]
+        company = row["company_name"]
+
+        # Dodaj węzły
+        if entity not in node_positions:
+            node_positions[entity] = {"id": entity, "level": level_map["entity"]}
+            nodes.append(node_positions[entity])
+        if property_ not in node_positions:
+            node_positions[property_] = {"id": property_, "level": level_map["property"]}
+            nodes.append(node_positions[property_])
+        if company not in node_positions:
+            node_positions[company] = {"id": company, "level": level_map["company"]}
+            nodes.append(node_positions[company])
+
+        # Dodaj połączenia
+        links.append({"from": entity, "to": property_})
+        links.append({"from": property_, "to": company})
+
+    return jsonify({"nodes": nodes, "links": links})
+
+# Endpoint do strony głównej
 @app.route('/')
 def index():
     html_template = """
@@ -16,22 +61,21 @@ def index():
                 // Pobierz dane z backendu
                 fetch('/data')
                     .then(response => response.json())
-                    .then(data => {
-                        // Przekształcenie danych w hierarchiczny format
-                        const nodes = {};
-                        const links = [];
+                    .then(responseData => {
+                        const { nodes, links } = responseData;
 
-                        data.forEach(({ from, to }) => {
-                            if (!nodes[from]) nodes[from] = { id: from, level: 0 };
-                            if (!nodes[to]) nodes[to] = { id: to, level: 1 };
-                            links.push({ from: from, to: to });
+                        // Przypisz ręczne pozycje dla węzłów hierarchicznych
+                        const positions = {};
+                        nodes.forEach(node => {
+                            if (node.level === 0) positions[node.id] = { x: 0, y: 0 };
+                            if (node.level === 1) positions[node.id] = { x: 0, y: -200 };
+                            if (node.level === 2) positions[node.id] = { x: 0, y: -400 };
                         });
 
                         // Konfiguracja Highcharts
                         Highcharts.chart('container', {
                             chart: {
                                 type: 'networkgraph',
-                                inverted: true, // Układ pionowy
                                 marginTop: 80
                             },
                             title: {
@@ -39,10 +83,8 @@ def index():
                             },
                             plotOptions: {
                                 networkgraph: {
-                                    keys: ['from', 'to'], // Klucze danych
                                     layoutAlgorithm: {
-                                        enableSimulation: false,
-                                        linkLength: 100
+                                        enableSimulation: false
                                     }
                                 }
                             },
@@ -55,6 +97,12 @@ def index():
                                     linkFormat: '',
                                     allowOverlap: true
                                 },
+                                nodes: nodes.map(node => ({
+                                    id: node.id,
+                                    marker: { radius: 10 },
+                                    x: positions[node.id].x,
+                                    y: positions[node.id].y
+                                })),
                                 data: links
                             }]
                         });
@@ -65,3 +113,6 @@ def index():
     </html>
     """
     return render_template_string(html_template)
+
+if __name__ == '__main__':
+    app.run(debug=True)
