@@ -1,1 +1,1 @@
-# struktura_firmy
+# Company Structure
