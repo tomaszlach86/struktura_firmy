@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, render_template_string
+from flask_cors import CORS
 import pandas as pd
 
 app = Flask(__name__)
+CORS(app)  # Obsługa CORS
 
 # Ścieżka do pliku Excel i nazwa arkusza
 FILE_PATH = "plik.xlsx"  # Domyślny plik Excel
@@ -41,19 +43,41 @@ def index():
     <head>
         <title>Structure Graph</title>
         <!-- Główna biblioteka Highcharts -->
-       <script src="https://code.highcharts.com/highcharts.js"></script>
-<script src="https://code.highcharts.com/modules/sankey.js"></script>
-<script src="https://code.highcharts.com/modules/organization.js"></script>
-<script src="https://code.highcharts.com/modules/exporting.js"></script>
-<script src="https://code.highcharts.com/modules/accessibility.js"></script>
+        <script src="https://code.highcharts.com/highcharts.js"></script>
+        <script src="https://code.highcharts.com/modules/sankey.js"></script>
+        <script src="https://code.highcharts.com/modules/organization.js"></script>
+        <script src="https://code.highcharts.com/modules/exporting.js"></script>
+        <script src="https://code.highcharts.com/modules/accessibility.js"></script>
     </head>
     <body>
         <div id="container" style="width: 100%; height: 600px;"></div>
         <script>
             document.addEventListener('DOMContentLoaded', function () {
+                // Obsługa kompatybilności z przeglądarkami, które mogą mieć problem z fetch
+                function fetchData(url) {
+                    if (window.fetch) {
+                        return fetch(url).then(response => response.json());
+                    } else {
+                        return new Promise(function (resolve, reject) {
+                            var xhr = new XMLHttpRequest();
+                            xhr.open("GET", url);
+                            xhr.onload = function () {
+                                if (xhr.status >= 200 && xhr.status < 300) {
+                                    resolve(JSON.parse(xhr.responseText));
+                                } else {
+                                    reject(xhr.statusText);
+                                }
+                            };
+                            xhr.onerror = function () {
+                                reject(xhr.statusText);
+                            };
+                            xhr.send();
+                        });
+                    }
+                }
+
                 // Pobierz dane z backendu
-                fetch('/data')
-                    .then(response => response.json())
+                fetchData('/data')
                     .then(data => {
                         // Sprawdzenie błędów w danych
                         if (data.error) {
