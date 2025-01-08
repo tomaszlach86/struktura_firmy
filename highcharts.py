@@ -1,32 +1,3 @@
-from flask import Flask, jsonify, render_template_string
-import pandas as pd
-
-app = Flask(__name__)
-
-# Ścieżka do pliku Excel
-FILE_PATH = "ścieżka_do_pliku.xlsx"  # Zamień na rzeczywistą ścieżkę do pliku
-SHEET_NAME = "AaA_TB"
-
-# Endpoint do pobierania danych
-@app.route('/data', methods=['GET'])
-def get_data():
-    # Wczytaj dane z Excela
-    df = pd.read_excel(FILE_PATH, sheet_name=SHEET_NAME)
-
-    # Konwertuj dane na format Highcharts
-    data = []
-    for _, row in df.iterrows():
-        entity = row["reporting_entity_name"]
-        property_ = row["property_name"]
-        company = row["company_name"]
-
-        # Dodaj połączenia
-        data.append({"from": entity, "to": property_})
-        data.append({"from": property_, "to": company})
-
-    return jsonify(data)
-
-# Endpoint do strony głównej
 @app.route('/')
 def index():
     html_template = """
@@ -46,10 +17,21 @@ def index():
                 fetch('/data')
                     .then(response => response.json())
                     .then(data => {
+                        // Przekształcenie danych w hierarchiczny format
+                        const nodes = {};
+                        const links = [];
+
+                        data.forEach(({ from, to }) => {
+                            if (!nodes[from]) nodes[from] = { id: from, level: 0 };
+                            if (!nodes[to]) nodes[to] = { id: to, level: 1 };
+                            links.push({ from: from, to: to });
+                        });
+
                         // Konfiguracja Highcharts
                         Highcharts.chart('container', {
                             chart: {
                                 type: 'networkgraph',
+                                inverted: true, // Układ pionowy
                                 marginTop: 80
                             },
                             title: {
@@ -57,8 +39,9 @@ def index():
                             },
                             plotOptions: {
                                 networkgraph: {
+                                    keys: ['from', 'to'], // Klucze danych
                                     layoutAlgorithm: {
-                                        enableSimulation: true,
+                                        enableSimulation: false,
                                         linkLength: 100
                                     }
                                 }
@@ -72,7 +55,7 @@ def index():
                                     linkFormat: '',
                                     allowOverlap: true
                                 },
-                                data: data
+                                data: links
                             }]
                         });
                     });
@@ -82,6 +65,3 @@ def index():
     </html>
     """
     return render_template_string(html_template)
-
-if __name__ == '__main__':
-    app.run(debug=True)
